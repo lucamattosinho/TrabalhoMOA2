@@ -4,12 +4,19 @@ from collections import deque
 from bisect import insort
 import os
 import time
+import random
 
 '''
 PROBLEMA:
 MINIMIZAR O CUSTO
 RESTRIÇÃO: TODAS AS LINHAS PRECISAM ESTAR COBERTAS
 '''
+
+class Solution:
+    def __init__(self, columns, cost) -> None:
+        self.columns = columns
+        self.cost = cost
+        self.fitness = 0
 
 class SCP:
     """
@@ -240,7 +247,9 @@ class SCP:
                         cont[i] += 1
                 wi = [wi[i] - cont[i] for i in range(len(linhas_cobertas)+1)]
 
-        return S.copy(), round(Z_S, 2)
+        solucao = Solution(S.copy(), round(Z_S, 2))
+
+        return solucao
 
     def genetic_algorithm(self):
         # Initialize population
@@ -254,14 +263,14 @@ class SCP:
         generations = 100
         # Halting criterea: number of generations
         for _ in range(generations):
+            # Calculate the fitness sum of the population
+            fitness_sum = sum(individual.cost for individual in population)
+
             # Evaluate fitness of each individual
-            fitness_scores = []
-            for individual in population:
-                fitness = self.evaluate_fitness(individual)
-                fitness_scores.append((individual, fitness))
+            self.evaluate_fitness(population, fitness_sum)
 
             # Select parents for reproduction
-            parents = self.selection(fitness_scores)
+            parents = self.selection_roulette(population, fitness_sum)
 
             # Apply crossover and mutation to create new offspring
             offspring = self.crossover(parents)
@@ -271,31 +280,33 @@ class SCP:
             population = offspring
 
         # Select the best individual as the solution
-        best_individual = max(fitness_scores, key=lambda x: x[1])[0]
+        best_individual = max(individual.fitness, key=lambda x: x[1])[0] # NÃO FUNCIONA
         best_fitness = self.evaluate_fitness(best_individual)
 
         return best_individual, best_fitness
 
-    def evaluate_fitness(self, individual):
-        # Calculate the fitness score for the given individual
-        # Here, you can define your own fitness evaluation criteria based on your problem
-        
-        # Example: Calculate the sum of the individual's attributes as the fitness score
-        fitness_score = sum(individual)
-        
-        # Calculate the solution cost based on the individual's attributes
-        solution_cost = self.calculate_solution_cost(individual)
-        
-        # Update the fitness score based on the solution cost
-        fitness_score -= solution_cost
-        
-        return fitness_score
+    def evaluate_fitness(self, population, fitness_sum):
+        # Calculate the fitness score for the given individual based on its cost
+        for individual in population:
+            individual.fitness = (individual.cost/fitness_sum)*100
+    
+    def selection_roulette(self, population, fitness_sum):
+        # Implement roulette wheel selection method here
+        # Calculate the total fitness score of the population
 
-    def selection(self, fitness_scores):
-        # Implement your selection method here
-        # Select parents from the population based on their fitness scores
-        # Return the selected parents
-        return
+        # Generate a random number between 0 and the total fitness score
+        random_number = random.uniform(0, fitness_sum)
+
+        # Iterate through the fitness scores and find the individual that corresponds to the random number
+        cumulative_fitness = 0
+        for individual in population:
+            cumulative_fitness += individual.fitness
+            if cumulative_fitness >= random_number:
+                selected_individual = individual
+                break
+        # Return the selected individual as the parent
+        return selected_individual
+
 
     def crossover(self, parents):
         # Implement your crossover method here
@@ -356,7 +367,9 @@ class SCP:
         for i in S:
             valor += self.custos[i-1]
 
-        return S.copy(), round(valor, 2)
+        solucao = Solution(S.copy(), round(valor, 2))
+        
+        return solucao
     
 
     def luca(self):
@@ -418,7 +431,9 @@ class SCP:
         print("Melhor solução encontrada: ", melhor_solucao)
         print("Custo: ", melhor_custo)
 
-        return melhor_solucao.copy(), round(melhor_custo, 2)   
+        solucao = Solution(melhor_solucao.copy(), round(melhor_custo, 2))
+
+        return solucao   
 
 
 def random_greedy(c, k, choice):
@@ -541,22 +556,22 @@ def run_test(file_path, constructor_func=lambda x: x.vasko_wilson(), improving_f
     
     melhor = float('inf')
     for _ in range(cons_iterations):
-        S, Z_S = constructor_func(scp)
-        print("Solucao do CONSTRUTOR: ", S)
-        print("CUSTO: ", Z_S)
+        Sol = constructor_func(scp)
+        print("Solucao do CONSTRUTOR: ", Sol.columns)
+        print("CUSTO: ", Sol.cost)
         for _ in range(imp_iterations):
-            S1, Z_S1 = improving_func(scp, S=S.copy(), Z_S=Z_S, P1=0.8, P2=1)
-            print("Solucao melhorada: ", S1)
-            print("CUSTO: ", Z_S1)
-            if Z_S1 < melhor:
-                sres = S1.copy()
-                melhor = Z_S1
+            Sol1 = improving_func(scp, S=Sol.columns.copy(), Z_S=Sol.cost, P1=0.8, P2=1)
+            print("Solucao melhorada: ", Sol1.columns)
+            print("CUSTO: ", Sol1.cost)
+            if Sol1.cost < melhor:
+                sres = Sol1.columns.copy()
+                melhor = Sol1.cost
 
     for _ in range(26):
-        retry, Z_retry = scp.busca_vizinhanca(S=sres.copy(), Z_S=melhor, P1=0.2, P2=1)
-        if Z_retry <= melhor:
-            melhor = Z_retry
-            sres = retry.copy()
+        retryS = scp.busca_vizinhanca(S=sres.copy(), Z_S=melhor, P1=0.2, P2=1)
+        if retryS.cost <= melhor:
+            melhor = retryS.cost
+            sres = retryS.columns.copy()
 
     print("MELHOR MELHORAMENTO: ", sres)
     print("CUSTO:", melhor)
