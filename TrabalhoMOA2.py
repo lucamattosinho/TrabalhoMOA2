@@ -260,7 +260,7 @@ class SCP:
             population.append(individual)
 
         # Evolutionary loop
-        generations = 100
+        generations = 10
         # Halting criterea: number of generations
         for _ in range(generations):
             # Calculate the fitness sum of the population
@@ -270,55 +270,170 @@ class SCP:
             self.evaluate_fitness(population, fitness_sum)
 
             # Select parents for reproduction
-            parents = self.selection_roulette(population, fitness_sum)
+            parents = self.selection_roulette(population)
 
             # Apply crossover and mutation to create new offspring
             offspring = self.crossover(parents)
-            offspring = self.mutation(offspring)
+            
+            population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
 
-            # Replace the old population with the new offspring
-            population = offspring
+            offspring = self.busca_vizinhanca(offspring.columns, offspring.cost, 0.8, 1)
+
+            # Replace the worst individual from the old population with the offspring
+            population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
+            population.pop()
+            population.append(offspring)
 
         # Select the best individual as the solution
-        best_individual = max(individual.fitness, key=lambda x: x[1])[0] # NÃO FUNCIONA
-        best_fitness = self.evaluate_fitness(best_individual)
+        best_individual = population[0]
 
-        return best_individual, best_fitness
+        return best_individual
 
     def evaluate_fitness(self, population, fitness_sum):
         # Calculate the fitness score for the given individual based on its cost
         for individual in population:
             individual.fitness = (individual.cost/fitness_sum)*100
+
     
-    def selection_roulette(self, population, fitness_sum):
-        # Implement roulette wheel selection method here
-        # Calculate the total fitness score of the population
+    def selection_roulette(self, population):
+        # Select two different parents
+        parents = []
+        already_used_fitness = 0
+        for _ in range(2):
+            # Generate a random number between 0 and the total fitness score
+            random_number = random.uniform(0, 100 - already_used_fitness)
+            
+            # Iterate through the population and find the individuals that correspond to the random number
+            cumulative_fitness = 0
+            for individual in population:
+                cumulative_fitness += individual.fitness
+                
+                if cumulative_fitness >= random_number and individual not in parents:
+                    parents.append(individual)
+                    already_used_fitness += individual.fitness
+                    break
 
-        # Generate a random number between 0 and the total fitness score
-        random_number = random.uniform(0, fitness_sum)
-
-        # Iterate through the fitness scores and find the individual that corresponds to the random number
-        cumulative_fitness = 0
-        for individual in population:
-            cumulative_fitness += individual.fitness
-            if cumulative_fitness >= random_number:
-                selected_individual = individual
-                break
-        # Return the selected individual as the parent
-        return selected_individual
+        # Return the selected parents
+        print("Pais selecionados: ", parents[0].columns, parents[1].columns)
+        return parents
 
 
     def crossover(self, parents):
-        # Implement your crossover method here
-        # Perform crossover operation on the selected parents to create offspring
-        # Return the offspring
-        return
+        parent1 = parents[0]
+        parent2 = parents[1]
+        
+        # Perform crossover operation to create a new individual
+        # For example, you can randomly select a crossover point and swap the genetic material between parents
+        
+        offspring_cols = parent1.columns.union(parent2.columns)
 
-    def mutation(self, offspring):
+        offspring_cols = list(offspring_cols)
+
+        random.shuffle(offspring_cols)
+
+        offspring_cols = set(offspring_cols)
+
+        wi = [0 for _ in range(self.quant_linhas+1)]
+        i = 0
+
+        for linhas in self.colunas_que_cobrem_linha:
+            for colunas in linhas:
+                if colunas in offspring_cols:
+                    wi[i] += 1
+            i += 1
+
+        # Iterate through the columns and remove the unnecessary ones
+        for k in reversed(list(offspring_cols)):
+            cont = [0 for _ in range(self.quant_linhas+1)]
+            for i in range(self.quant_linhas+1):
+                if k in self.colunas_que_cobrem_linha[i]:
+                    cont[i] += 1
+
+            flag = True
+            for i in self.linhas_cobertas[k-1]:
+                if wi[i] - cont[i] < 1:
+                    flag = False
+
+            if flag:
+                offspring_cols.remove(k)
+
+                cont = [0 for _ in range(self.quant_linhas+1)]
+                for i in range(self.quant_linhas+1):
+                    if k in self.colunas_que_cobrem_linha[i]:
+                        cont[i] += 1
+                wi = [wi[i] - cont[i] for i in range(self.quant_linhas+1)]
+        
+        valor = 0
+        for i in offspring_cols:
+            valor += self.custos[i-1]
+
+        offspring = Solution(offspring_cols, round(valor, 2))
+        print("Filho gerado: ", offspring.columns)
+        # Return the offspring
+        return offspring
+
+    def mutation(self, offspring, mutation_rate, population_size):
         # Implement your mutation method here
-        # Perform mutation operation on the offspring
-        # Return the mutated offspring
-        return
+        
+        individuals_to_mutate = random.sample(offspring, int(mutation_rate*population_size))
+
+        offspring = [individual for individual in offspring if individual not in individuals_to_mutate]
+
+        for individual in individuals_to_mutate:
+            # Add random amount of columns
+            num_columns_to_add = random.randint(1, len(self.colunas)*0.1)
+            columns_to_add = random.sample(self.colunas, num_columns_to_add)
+            # Remove columns that are already in the individual
+            available_columns = [column for column in columns_to_add if column not in individual.columns]
+            
+            individual.columns.update(available_columns)
+            
+            # Shuffle the solution
+            individual.columns = list(individual.columns)
+
+            random.shuffle(individual.columns)
+
+            individual.columns = set(individual.columns)
+                    
+            # Remove unnecessary columns
+            wi = [0 for _ in range(self.quant_linhas+1)]
+            i = 0
+
+            for linhas in self.colunas_que_cobrem_linha:
+                for colunas in linhas:
+                    if colunas in individual.columns:
+                        wi[i] += 1
+                i += 1
+
+            # Iterate through the columns and remove the unnecessary ones
+            for k in reversed(list(individual.columns)):
+                cont = [0 for _ in range(self.quant_linhas+1)]
+                for i in range(self.quant_linhas+1):
+                    if k in self.colunas_que_cobrem_linha[i]:
+                        cont[i] += 1
+
+                flag = True
+                for i in self.linhas_cobertas[k-1]:
+                    if wi[i] - cont[i] < 1:
+                        flag = False
+
+                if flag:
+                    individual.columns.remove(k)
+
+                    cont = [0 for _ in range(self.quant_linhas+1)]
+                    for i in range(self.quant_linhas+1):
+                        if k in self.colunas_que_cobrem_linha[i]:
+                            cont[i] += 1
+                    wi = [wi[i] - cont[i] for i in range(self.quant_linhas+1)]
+            
+            valor = 0
+            for i in individual.columns:
+                valor += self.custos[i-1]
+            individual.cost = round(valor, 2)
+
+        offspring.extend(individuals_to_mutate)
+
+        return offspring
 
     def vasko_wilson(self):
         M = set(range(1, self.quant_linhas+1))
@@ -653,6 +768,13 @@ def c_wren4():
     random.seed(13)
     constructor_test("Wren_04.dat")
 
+def teste_genetico(file_path):
+    file_path = os.path.realpath(file_path)
+    scp = parse_arquivo(file_path)
+    melhor_solucao = scp.genetic_algorithm()
+    print("Melhor solução encontrada: ", melhor_solucao.columns)
+    print("Custo: ", melhor_solucao.cost)
+
 if __name__ == "__main__":
     t1 = time.time()
     """
@@ -669,7 +791,7 @@ if __name__ == "__main__":
     """
     Testes dos melhorativos
     """
-    teste1()
+    #teste1()
     #teste2()
     #teste3()
     #teste4()
@@ -677,5 +799,11 @@ if __name__ == "__main__":
     #wren2()
     #wren3()
     #wren4()
+
+    """
+    Testes do algoritmo genético
+    """
+    teste_genetico("Teste_01.dat")
+
     t2 = time.time()
     print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
