@@ -142,19 +142,14 @@ class SCP:
 
     def busca_vizinhanca(self, S, Z_S, P1, P2):
         # Passo 0
-        linhas_cobertas = [len(self.colunas_que_cobrem_linha[k]) for k in range(1, self.quant_linhas+1)]
+        len_lines = self.quant_linhas+1
+        len_columns = self.quant_colunas+1
+
         S_prime = set(self.colunas) - S
         N_S = len(S)
         Q_S = max(self.custos[i-1] for i in S)
    
-        wi = [0 for _ in range(self.quant_linhas+1)]
-        i = 0
-
-        for linhas in self.colunas_que_cobrem_linha:
-            for colunas in linhas:
-                if colunas in S:
-                    wi[i] += 1
-            i += 1
+        wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in S) for i in range(len_lines)]
         
         d = 0
         D = math.ceil(P1 * N_S)
@@ -171,13 +166,13 @@ class SCP:
 
             Z_S -= round(self.custos[k-1], 2)
           
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
+            cont = [0 for _ in range(len_lines)]
             
-            for i in range(len(linhas_cobertas)+1):
+            for i in range(len_lines):
                 if k in self.colunas_que_cobrem_linha[i]:
                     cont[i] += 1
 
-            wi = [wi[i] - cont[i] for i in range(len(linhas_cobertas)+1)]
+            wi = [wi[i] - cont[i] for i in range(len_lines)]
  
             d += 1
             if d == D:
@@ -185,7 +180,7 @@ class SCP:
         
         while True:
             # Passo 3
-            U = {i for i in range(self.quant_linhas+1) if wi[i] == 0}
+            U = {i for i in range(len_lines) if wi[i] == 0}
             U = U - {0}
 
             if not U:
@@ -199,9 +194,11 @@ class SCP:
             #self.linhas_cobertas[i] significa quais linhas sao cobertas pela coluna i
             #S_prime_E === melhores colunas para serem colocadas na solução
             
-            alpha = [[1 if wi[i] == 0 and i in self.linhas_cobertas[j-1] and j in S_prime_E else 0 for j in range(self.quant_colunas+1)] for i in range(self.quant_linhas+1)]
+            alpha = [[1 if wi[i] == 0 and i in self.linhas_cobertas[j-1] and j in S_prime_E else 0 for j in range(len_columns)] for i in range(len_lines)]
 
-            v_j = [sum(alpha[i][j] for i in range(self.quant_linhas+1)) if j in S_prime_E else 0 for j in range(self.quant_colunas+1)]
+            alpha_transpose = list(map(list, zip(*alpha)))  # Transpose alpha matrix
+
+            v_j = [sum(alpha_transpose[j]) if j in S_prime_E else 0 for j in range(len_columns)]
 
             beta_j = [self.custos[j-1] / v_j[j] if v_j[j] != 0 and j in S_prime_E else float('inf') for j in S_prime_E]
 
@@ -216,17 +213,17 @@ class SCP:
 
             Z_S += round(self.custos[k-1], 2)
 
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
+            cont = [0 for _ in range(len_lines)]
 
-            for i in range(len(linhas_cobertas)+1):
+            for i in range(len_lines):
                 if k in self.colunas_que_cobrem_linha[i]:
                     cont[i] += 1
-            wi = [wi[i] + cont[i] for i in range(len(linhas_cobertas)+1)]
+            wi = [wi[i] + cont[i] for i in range(len_lines)]
 
         # Passo 6
         for k in reversed(list(S)):
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
-            for i in range(len(linhas_cobertas)+1):
+            cont = [0 for _ in range(len_lines)]
+            for i in range(len_lines):
                 if k in self.colunas_que_cobrem_linha[i]:
                     cont[i] += 1
 
@@ -241,26 +238,26 @@ class SCP:
 
                 Z_S -= round(self.custos[k-1], 2)
 
-                cont = [0 for _ in range(len(linhas_cobertas)+1)]
-                for i in range(len(linhas_cobertas)+1):
+                cont = [0 for _ in range(len_lines)]
+                for i in range(len_lines):
                     if k in self.colunas_que_cobrem_linha[i]:
                         cont[i] += 1
-                wi = [wi[i] - cont[i] for i in range(len(linhas_cobertas)+1)]
+                wi = [wi[i] - cont[i] for i in range(len_lines)]
 
         solucao = Solution(S.copy(), round(Z_S, 2))
 
         return solucao
-
+    
     def genetic_algorithm(self):
         # Initialize population
         population = []
-        population_size = 10
+        population_size = 20
         for _ in range(population_size):
             individual = self.vasko_wilson()
             population.append(individual)
 
         # Evolutionary loop
-        generations = 10
+        generations = 100
         # Halting criterea: number of generations
         for _ in range(generations):
             # Calculate the fitness sum of the population
@@ -277,7 +274,7 @@ class SCP:
             
             population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
 
-            offspring = self.busca_vizinhanca(offspring.columns, offspring.cost, 0.8, 1)
+            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
 
             # Replace the worst individual from the old population with the offspring
             population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
@@ -285,6 +282,48 @@ class SCP:
             population.append(offspring)
 
         # Select the best individual as the solution
+        best_individual = population[0]
+
+        return best_individual
+
+    def genetic_algorithm_local_search(self):
+        # Initialize population
+        population = []
+        population_size = 20
+        for _ in range(population_size):
+            individual = self.vasko_wilson()
+            population.append(individual)
+
+        # Evolutionary loop
+        generations = 100
+        # Halting criterea: number of generations
+        for _ in range(generations):
+            # Calculate the fitness sum of the population
+            fitness_sum = sum(individual.cost for individual in population)
+
+            # Evaluate fitness of each individual
+            self.evaluate_fitness(population, fitness_sum)
+
+            # Select parents for reproduction
+            parents = self.selection_roulette(population)
+
+            # Apply crossover and mutation to create new offspring
+            offspring = self.crossover(parents)
+            
+            population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
+
+            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
+
+            # Replace the worst individual from the old population with the offspring
+            population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
+            population.pop()
+            population.append(offspring)
+
+            for individual in population:
+                individual = self.busca_vizinhanca(individual.columns.copy(), individual.cost, 0.8, 1)
+
+        # Select the best individual as the solution
+        population.sort(key=lambda individual: individual.cost)
         best_individual = population[0]
 
         return best_individual
@@ -322,6 +361,7 @@ class SCP:
         parent1 = parents[0]
         parent2 = parents[1]
         
+        len_lines = self.quant_linhas+1
         # Perform crossover operation to create a new individual
         # For example, you can randomly select a crossover point and swap the genetic material between parents
         
@@ -333,19 +373,15 @@ class SCP:
 
         offspring_cols = set(offspring_cols)
 
-        wi = [0 for _ in range(self.quant_linhas+1)]
+        wi = [0 for _ in range(len_lines)]
         i = 0
 
-        for linhas in self.colunas_que_cobrem_linha:
-            for colunas in linhas:
-                if colunas in offspring_cols:
-                    wi[i] += 1
-            i += 1
+        wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in offspring_cols) for i in range(len_lines)]
 
         # Iterate through the columns and remove the unnecessary ones
         for k in reversed(list(offspring_cols)):
-            cont = [0 for _ in range(self.quant_linhas+1)]
-            for i in range(self.quant_linhas+1):
+            cont = [0 for _ in range(len_lines)]
+            for i in range(len_lines):
                 if k in self.colunas_que_cobrem_linha[i]:
                     cont[i] += 1
 
@@ -357,11 +393,11 @@ class SCP:
             if flag:
                 offspring_cols.remove(k)
 
-                cont = [0 for _ in range(self.quant_linhas+1)]
-                for i in range(self.quant_linhas+1):
+                cont = [0 for _ in range(len_lines)]
+                for i in range(len_lines):
                     if k in self.colunas_que_cobrem_linha[i]:
                         cont[i] += 1
-                wi = [wi[i] - cont[i] for i in range(self.quant_linhas+1)]
+                wi = [wi[i] - cont[i] for i in range(len_lines)]
         
         valor = 0
         for i in offspring_cols:
@@ -374,7 +410,8 @@ class SCP:
 
     def mutation(self, offspring, mutation_rate, population_size):
         # Implement your mutation method here
-        
+        len_lines = self.quant_linhas+1
+
         individuals_to_mutate = random.sample(offspring, int(mutation_rate*population_size))
 
         offspring = [individual for individual in offspring if individual not in individuals_to_mutate]
@@ -396,19 +433,12 @@ class SCP:
             individual.columns = set(individual.columns)
                     
             # Remove unnecessary columns
-            wi = [0 for _ in range(self.quant_linhas+1)]
-            i = 0
-
-            for linhas in self.colunas_que_cobrem_linha:
-                for colunas in linhas:
-                    if colunas in individual.columns:
-                        wi[i] += 1
-                i += 1
+            wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in individual.columns) for i in range(len_lines)]
 
             # Iterate through the columns and remove the unnecessary ones
             for k in reversed(list(individual.columns)):
-                cont = [0 for _ in range(self.quant_linhas+1)]
-                for i in range(self.quant_linhas+1):
+                cont = [0 for _ in range(len_lines)]
+                for i in range(len_lines):
                     if k in self.colunas_que_cobrem_linha[i]:
                         cont[i] += 1
 
@@ -420,11 +450,11 @@ class SCP:
                 if flag:
                     individual.columns.remove(k)
 
-                    cont = [0 for _ in range(self.quant_linhas+1)]
-                    for i in range(self.quant_linhas+1):
+                    cont = [0 for _ in range(len_lines)]
+                    for i in range(len_lines):
                         if k in self.colunas_que_cobrem_linha[i]:
                             cont[i] += 1
-                    wi = [wi[i] - cont[i] for i in range(self.quant_linhas+1)]
+                    wi = [wi[i] - cont[i] for i in range(len_lines)]
             
             valor = 0
             for i in individual.columns:
@@ -449,7 +479,7 @@ class SCP:
         while R:
             k = {j: len(set(P[j]).intersection(R)) for j in range(self.quant_colunas+1)}
             
-            j_a_escolher = random_greedy(self.custos, k, 1)
+            j_a_escolher = random_greedy(self.custos, k)
            
             minimo = float('inf')
             for i in range(len(j_a_escolher)):
@@ -484,79 +514,13 @@ class SCP:
 
         solucao = Solution(S.copy(), round(valor, 2))
         
-        return solucao
-    
-
-    def luca(self):
-        melhor_solucao = None
-        melhor_custo = float('inf')
-
-        for _ in range(5):
-            M = set(range(1, self.quant_linhas + 1))
-            P = deque(self.linhas_cobertas)
-            P.appendleft([])
-
-            k = [len(P[j]) for j in range(len(self.linhas_cobertas) + 1)]
-
-            R = M.copy()
-            S = set()
-            t = 1
-            j = []
-
-            while R:
-                k = {j: len(set(P[j]).intersection(R)) for j in range(self.quant_colunas + 1)}
-
-                j_a_escolher = random_greedy(self.custos, k, 0)
-                minimo = float('inf')
-                for i in range(len(j_a_escolher)):
-                    if j_a_escolher[i] < minimo:
-                        min_idx = i
-                        minimo = j_a_escolher[i]
-
-                j.append(min_idx)
-
-                Pj_t = P[j[t - 1]]
-                R = list(R)
-
-                for i in range(len(Pj_t)):
-                    if (Pj_t[i] in R):
-                        R.remove(Pj_t[i])
-                S.add(j[t - 1])
-
-                t += 1
-
-            sorted_S = set(sorted(S, key=lambda j: self.custos[j-1], reverse=True))
-
-            for i in sorted_S:
-                if is_covering_feasible(self.linhas_cobertas, sorted_S - {i}, M):
-                    sorted_S = sorted_S - {i}
-
-            S = sorted_S
-
-            valor = 0
-            for i in S:
-                valor += self.custos[i-1]
-
-            if valor < melhor_custo:
-                melhor_custo = round(valor, 2)
-                melhor_solucao = S.copy()
-
-            print("Reinicializando...")
-
-        print("Melhor solução encontrada: ", melhor_solucao)
-        print("Custo: ", melhor_custo)
-
-        solucao = Solution(melhor_solucao.copy(), round(melhor_custo, 2))
-
         return solucao   
 
 
-def random_greedy(c, k, choice):
+def random_greedy(c, k):
     j_a_escolher = []
-    if choice:
-        x = random.choice([1, 2, 3, 4, 5, 6, 7])
-    else:
-        x = random.choice([9, 2])
+
+    x = random.choice([1, 2, 3, 4, 5, 6, 7, 9])
 
     match x:
         case 1:
@@ -736,37 +700,12 @@ def constructor_test(file_path, constructor_func=lambda x: x.vasko_wilson(), ite
     print("O melhor resultado para o construtor foi:", melhors)
     print("Custo:", melhorz)
 
-def c_teste1():
-    random.seed(1)
-    constructor_test("Teste_01.dat")
-
-def c_teste2():
-    random.seed(1)
-    constructor_test("Teste_02.dat", constructor_func=lambda x: x.luca(), iterations=501)
-
-def c_teste3():
-    random.seed(1)
-    constructor_test("Teste_03.dat")
-
-def c_teste4():
-    random.seed(1)
-    constructor_test("Teste_04.dat")
-
-def c_wren1():
-    random.seed(2)
-    constructor_test("Wren_01.dat", constructor_func=lambda x: x.luca())
-
-def c_wren2():
-    random.seed(12)
-    constructor_test("Wren_02.dat")
-
-def c_wren3():
-    random.seed(17)
-    constructor_test("Wren_03.dat")
-
-def c_wren4():
-    random.seed(13)
-    constructor_test("Wren_04.dat")
+def teste_genetico_local_search(file_path):
+    file_path = os.path.realpath(file_path)
+    scp = parse_arquivo(file_path)
+    melhor_solucao = scp.genetic_algorithm_local_search()
+    print("Melhor solução encontrada: ", melhor_solucao.columns)
+    print("Custo: ", melhor_solucao.cost)
 
 def teste_genetico(file_path):
     file_path = os.path.realpath(file_path)
@@ -778,32 +717,14 @@ def teste_genetico(file_path):
 if __name__ == "__main__":
     t1 = time.time()
     """
-    Testes dos construtores
+    Testes do algoritmo genético com busca local
     """
-    #c_teste1()
-    #c_teste2()
-    #c_teste3()
-    #c_teste4()
-    #c_wren1()
-    #c_wren2()
-    #c_wren3()
-    #c_wren4()
-    """
-    Testes dos melhorativos
-    """
-    #teste1()
-    #teste2()
-    #teste3()
-    #teste4()
-    #wren1()
-    #wren2()
-    #wren3()
-    #wren4()
+    teste_genetico_local_search("Teste_01.dat")
 
     """
-    Testes do algoritmo genético
+    Testes do algoritmo genético sem busca local
     """
-    teste_genetico("Teste_01.dat")
+    #teste_genetico("Teste_01.dat")
 
     t2 = time.time()
     print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
