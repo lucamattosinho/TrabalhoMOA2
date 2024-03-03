@@ -256,6 +256,7 @@ class SCP:
             individual = self.vasko_wilson()
             population.append(individual)
 
+        population.sort(key=lambda individual: individual.cost)
         # Evolutionary loop
         generations = 100
         # Halting criterea: number of generations
@@ -273,8 +274,6 @@ class SCP:
             offspring = self.crossover(parents)
             
             population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
-
-            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
 
             # Replace the worst individual from the old population with the offspring
             population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
@@ -286,18 +285,22 @@ class SCP:
 
         return best_individual
 
-    def genetic_algorithm_local_search(self):
+    def genetic_algorithm_local_search(self, population_size, generations, mutation_rate, selection_method):
         # Initialize population
         population = []
-        population_size = 20
+
         for _ in range(population_size):
             individual = self.vasko_wilson()
             population.append(individual)
 
+        population.sort(key=lambda individual: individual.cost)
         # Evolutionary loop
-        generations = 100
+
         # Halting criterea: number of generations
         for _ in range(generations):
+            print("População: ")
+            for individual in population:
+                print(individual.columns, "custo: ", individual.cost)
             # Calculate the fitness sum of the population
             fitness_sum = sum(individual.cost for individual in population)
 
@@ -305,12 +308,15 @@ class SCP:
             self.evaluate_fitness(population, fitness_sum)
 
             # Select parents for reproduction
-            parents = self.selection_roulette(population)
+            if selection_method == "roulette":
+                parents = self.selection_roulette(population)
+            else:
+                parents = self.selection_tournament(population, population_size//2)
 
             # Apply crossover and mutation to create new offspring
             offspring = self.crossover(parents)
             
-            population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
+            population = self.mutation(population, mutation_rate=mutation_rate, population_size=population_size)
 
             offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
 
@@ -322,8 +328,8 @@ class SCP:
             for individual in population:
                 individual = self.busca_vizinhanca(individual.columns.copy(), individual.cost, 0.8, 1)
 
+            population.sort(key=lambda individual: individual.cost)
         # Select the best individual as the solution
-        population.sort(key=lambda individual: individual.cost)
         best_individual = population[0]
 
         return best_individual
@@ -333,6 +339,23 @@ class SCP:
         for individual in population:
             individual.fitness = (individual.cost/fitness_sum)*100
 
+
+    def selection_tournament(self, population, tournament_size):
+        # Select two different parents
+        parents = []
+        for _ in range(2):
+            # Randomly select a number of individuals from the population
+            tournament = random.sample(population, tournament_size)
+            
+            # Sort the tournament by fitness
+            tournament.sort(key=lambda individual: individual.fitness)
+            
+            # Select the individual with the highest fitness
+            parents.append(tournament[-1])
+
+        # Return the selected parents
+        #print("Pais selecionados: ", parents[0].columns, parents[1].columns)
+        return parents
     
     def selection_roulette(self, population):
         # Select two different parents
@@ -367,23 +390,11 @@ class SCP:
         
         offspring_cols = parent1.columns.union(parent2.columns)
 
-        offspring_cols = list(offspring_cols)
-
-        random.shuffle(offspring_cols)
-
-        offspring_cols = set(offspring_cols)
-
-        wi = [0 for _ in range(len_lines)]
-        i = 0
-
         wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in offspring_cols) for i in range(len_lines)]
 
         # Iterate through the columns and remove the unnecessary ones
         for k in reversed(list(offspring_cols)):
-            cont = [0 for _ in range(len_lines)]
-            for i in range(len_lines):
-                if k in self.colunas_que_cobrem_linha[i]:
-                    cont[i] += 1
+            cont = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in offspring_cols) for i in range(len_lines)]
 
             flag = True
             for i in self.linhas_cobertas[k-1]:
@@ -392,11 +403,6 @@ class SCP:
 
             if flag:
                 offspring_cols.remove(k)
-
-                cont = [0 for _ in range(len_lines)]
-                for i in range(len_lines):
-                    if k in self.colunas_que_cobrem_linha[i]:
-                        cont[i] += 1
                 wi = [wi[i] - cont[i] for i in range(len_lines)]
         
         valor = 0
@@ -404,21 +410,20 @@ class SCP:
             valor += self.custos[i-1]
 
         offspring = Solution(offspring_cols, round(valor, 2))
-        print("Filho gerado: ", offspring.columns)
+        #print("Filho gerado: ", offspring.columns)
         # Return the offspring
         return offspring
 
-    def mutation(self, offspring, mutation_rate, population_size):
+    def mutation(self, population, mutation_rate, population_size):
         # Implement your mutation method here
         len_lines = self.quant_linhas+1
 
-        individuals_to_mutate = random.sample(offspring, int(mutation_rate*population_size))
-
-        offspring = [individual for individual in offspring if individual not in individuals_to_mutate]
+        population_to_mutate = [Solution(individual.columns.copy(), individual.cost) for individual in population]
+        individuals_to_mutate = random.sample(population_to_mutate, int(mutation_rate*population_size))
 
         for individual in individuals_to_mutate:
             # Add random amount of columns
-            num_columns_to_add = random.randint(1, len(self.colunas)*0.1)
+            num_columns_to_add = random.randint(1, int(len(self.colunas)*0.1))
             columns_to_add = random.sample(self.colunas, num_columns_to_add)
             # Remove columns that are already in the individual
             available_columns = [column for column in columns_to_add if column not in individual.columns]
@@ -437,10 +442,8 @@ class SCP:
 
             # Iterate through the columns and remove the unnecessary ones
             for k in reversed(list(individual.columns)):
-                cont = [0 for _ in range(len_lines)]
-                for i in range(len_lines):
-                    if k in self.colunas_que_cobrem_linha[i]:
-                        cont[i] += 1
+
+                cont = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in individual.columns) for i in range(len_lines)]
 
                 flag = True
                 for i in self.linhas_cobertas[k-1]:
@@ -449,11 +452,7 @@ class SCP:
 
                 if flag:
                     individual.columns.remove(k)
-
-                    cont = [0 for _ in range(len_lines)]
-                    for i in range(len_lines):
-                        if k in self.colunas_que_cobrem_linha[i]:
-                            cont[i] += 1
+                    
                     wi = [wi[i] - cont[i] for i in range(len_lines)]
             
             valor = 0
@@ -461,9 +460,16 @@ class SCP:
                 valor += self.custos[i-1]
             individual.cost = round(valor, 2)
 
-        offspring.extend(individuals_to_mutate)
+        population.sort(key=lambda x: x.cost)
+        print("-----------------------ORDENAÇÃO DA POPULAÇÃO APÓS MUTAÇÃO:----------------------")
+        for individual in population:
+            print(individual.columns, "custo: ", individual.cost)
+        for _ in range(int(mutation_rate*population_size)):
+            population.pop()
+        population.extend(individuals_to_mutate)
+        population.sort(key=lambda individual: individual.cost)
 
-        return offspring
+        return population
 
     def vasko_wilson(self):
         M = set(range(1, self.quant_linhas+1))
@@ -629,64 +635,6 @@ def is_covering_feasible(columns, selected_columns, M):
 Daqui pra baixo ficam os testes!!!
 """
 
-def run_test(file_path, constructor_func=lambda x: x.vasko_wilson(), improving_func=lambda x, S, Z_S, P1, P2: x.busca_vizinhanca(S, Z_S, P1, P2), imp_iterations=11, cons_iterations=11):
-    file_path = os.path.realpath(file_path)
-    scp = parse_arquivo(file_path)
-    
-    melhor = float('inf')
-    for _ in range(cons_iterations):
-        Sol = constructor_func(scp)
-        print("Solucao do CONSTRUTOR: ", Sol.columns)
-        print("CUSTO: ", Sol.cost)
-        for _ in range(imp_iterations):
-            Sol1 = improving_func(scp, S=Sol.columns.copy(), Z_S=Sol.cost, P1=0.8, P2=1)
-            print("Solucao melhorada: ", Sol1.columns)
-            print("CUSTO: ", Sol1.cost)
-            if Sol1.cost < melhor:
-                sres = Sol1.columns.copy()
-                melhor = Sol1.cost
-
-    for _ in range(26):
-        retryS = scp.busca_vizinhanca(S=sres.copy(), Z_S=melhor, P1=0.2, P2=1)
-        if retryS.cost <= melhor:
-            melhor = retryS.cost
-            sres = retryS.columns.copy()
-
-    print("MELHOR MELHORAMENTO: ", sres)
-    print("CUSTO:", melhor)
-
-def teste1():
-    random.seed(6)
-    run_test("Teste_01.dat")
-
-def teste2():
-    random.seed(7)
-    run_test("Teste_02.dat", constructor_func=lambda x: x.luca())
-
-def teste3():
-    random.seed(3)
-    run_test("Teste_03.dat")
-
-def teste4():
-    random.seed(1)
-    run_test("Teste_04.dat")
-
-def wren1():
-    random.seed(10)
-    run_test("Wren_01.dat", constructor_func=lambda x: x.luca())
-
-def wren2():
-    random.seed(20)
-    run_test("Wren_02.dat", constructor_func=lambda x: x.luca(), imp_iterations=5)
-
-def wren3():
-    random.seed(6)
-    run_test("Wren_03.dat")
-
-def wren4():
-    random.seed(6)
-    run_test("Wren_04.dat")
-
 def constructor_test(file_path, constructor_func=lambda x: x.vasko_wilson(), iterations=101):
     file_path = os.path.realpath(file_path)
     scp = parse_arquivo(file_path)
@@ -703,7 +651,7 @@ def constructor_test(file_path, constructor_func=lambda x: x.vasko_wilson(), ite
 def teste_genetico_local_search(file_path):
     file_path = os.path.realpath(file_path)
     scp = parse_arquivo(file_path)
-    melhor_solucao = scp.genetic_algorithm_local_search()
+    melhor_solucao = scp.genetic_algorithm_local_search(20, 300, 0.2, "roulette")
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
@@ -719,7 +667,7 @@ if __name__ == "__main__":
     """
     Testes do algoritmo genético com busca local
     """
-    teste_genetico_local_search("Teste_01.dat")
+    teste_genetico_local_search("Teste_03.dat")
 
     """
     Testes do algoritmo genético sem busca local
