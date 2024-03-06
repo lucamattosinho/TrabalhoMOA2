@@ -5,6 +5,7 @@ from bisect import insort
 import os
 import time
 import random
+import argparse
 
 '''
 PROBLEMA:
@@ -648,10 +649,12 @@ def constructor_test(file_path, constructor_func=lambda x: x.vasko_wilson(), ite
     print("O melhor resultado para o construtor foi:", melhors)
     print("Custo:", melhorz)
 
-def teste_genetico_local_search(file_path):
+def teste_genetico_local_search(file_path, generations, population_size, mutation_rate, selection_method, seed):
     file_path = os.path.realpath(file_path)
     scp = parse_arquivo(file_path)
-    melhor_solucao = scp.genetic_algorithm_local_search(20, 300, 0.2, "roulette")
+    if seed:
+        random.seed(seed)
+    melhor_solucao = scp.genetic_algorithm_local_search(generations, population_size, mutation_rate, selection_method)
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
@@ -662,17 +665,36 @@ def teste_genetico(file_path):
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
-if __name__ == "__main__":
+def main():
+    # Configurando o parser de argumentos
+    parser = argparse.ArgumentParser(description='Descrição do seu programa.')
+
+    # Adicionando argumentos
+    parser.add_argument('-ps', '--parametro1', required=True, help='Tamanho da populacao')
+    parser.add_argument('-g', '--parametro2', required=True, help='Tamanho da geracao')
+    parser.add_argument('-mr', '--parametro3', required=True, help='Taxa de mutacao')
+    parser.add_argument('-sm', '--parametro4', required=True, help='Metodo de selecao')
+    parser.add_argument('-f', '--parametro5', required=True, help='Arquivo de entrada')
+    parser.add_argument('-s', '--parametro6', required=False, help='Seed para o random')
+
+    # Parseando os argumentos da linha de comando
+    args = parser.parse_args()
+
+    # Acessando os valores dos argumentos
+    parametro1 = int(args.parametro1)
+    parametro2 = int(args.parametro2)
+    parametro3 = float(args.parametro3)
+    parametro4 = args.parametro4
+    parametro5 = args.parametro5
+    if args.parametro6:
+        parametro6 = int(args.parametro6)
+    else:
+        parametro6 = None
+
     t1 = time.time()
-    """
-    Testes do algoritmo genético com busca local
-    """
-    teste_genetico_local_search("Teste_03.dat")
-
-    """
-    Testes do algoritmo genético sem busca local
-    """
-    #teste_genetico("Teste_01.dat")
-
+    teste_genetico_local_search(parametro5, parametro2, parametro1, parametro3, parametro4, parametro6)
     t2 = time.time()
     print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
+
+if __name__ == "__main__":
+    main()
