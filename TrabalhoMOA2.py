@@ -299,6 +299,7 @@ class SCP:
 
         # Halting criterea: number of generations
         for _ in range(generations):
+            print("ITERAÇÃO: ", _)
             print("População: ")
             for individual in population:
                 print(individual.columns, "custo: ", individual.cost)
@@ -355,7 +356,6 @@ class SCP:
             parents.append(tournament[-1])
 
         # Return the selected parents
-        #print("Pais selecionados: ", parents[0].columns, parents[1].columns)
         return parents
     
     def selection_roulette(self, population):
@@ -623,13 +623,13 @@ def parse_arquivo(nome_arquivo):
 
 
 def is_covering_feasible(columns, selected_columns, M):
-        covered_rows = set()
-        for col_idx in selected_columns:
-            covered_rows.update(columns[col_idx-1])
+    covered_rows = set()
+    for col_idx in selected_columns:
+        covered_rows.update(columns[col_idx-1])
 
-        covered_rows = sorted(covered_rows)
+    covered_rows = sorted(covered_rows)
 
-        return set(M) == set(covered_rows)
+    return set(M) == set(covered_rows)
 
 
 """
