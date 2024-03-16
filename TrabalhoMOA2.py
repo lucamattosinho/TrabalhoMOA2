@@ -6,6 +6,7 @@ import os
 import time
 import random
 import argparse
+import matplotlib.pyplot as plt
 
 '''
 PROBLEMA:
@@ -249,124 +250,134 @@ class SCP:
 
         return solucao
     
-    def genetic_algorithm(self):
-        # Initialize population
+    def genetic_algorithm(self, population_size, generations, mutation_rate, selection_method):
         population = []
         population_size = 20
-        for _ in range(population_size):
-            individual = self.vasko_wilson()
-            population.append(individual)
-
-        population.sort(key=lambda individual: individual.cost)
-        # Evolutionary loop
-        generations = 100
-        # Halting criterea: number of generations
-        for _ in range(generations):
-            # Calculate the fitness sum of the population
-            fitness_sum = sum(individual.cost for individual in population)
-
-            # Evaluate fitness of each individual
-            self.evaluate_fitness(population, fitness_sum)
-
-            # Select parents for reproduction
-            parents = self.selection_roulette(population)
-
-            # Apply crossover and mutation to create new offspring
-            offspring = self.crossover(parents)
-            
-            population = self.mutation(population, mutation_rate=0.1, population_size=population_size)
-
-            # Replace the worst individual from the old population with the offspring
-            population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
-            population.pop()
-            population.append(offspring)
-
-        # Select the best individual as the solution
-        best_individual = population[0]
-
-        return best_individual
-
-    def genetic_algorithm_local_search(self, population_size, generations, mutation_rate, selection_method):
-        # Initialize population
-        population = []
+        current_best = float('inf')
+        best_solutions = []
 
         for _ in range(population_size):
             individual = self.vasko_wilson()
             population.append(individual)
 
         population.sort(key=lambda individual: individual.cost)
-        # Evolutionary loop
 
-        # Halting criterea: number of generations
+        if population[0].cost < current_best:
+            current_best = population[0].cost
+            best_solutions.append(current_best)
+
         for _ in range(generations):
-            print("ITERAÇÃO: ", _)
-            print("População: ")
-            for individual in population:
-                print(individual.columns, "custo: ", individual.cost)
-            # Calculate the fitness sum of the population
             fitness_sum = sum(individual.cost for individual in population)
 
-            # Evaluate fitness of each individual
             self.evaluate_fitness(population, fitness_sum)
 
-            # Select parents for reproduction
             if selection_method == "roulette":
                 parents = self.selection_roulette(population)
             else:
                 parents = self.selection_tournament(population, population_size//2)
 
-            # Apply crossover and mutation to create new offspring
             offspring = self.crossover(parents)
             
-            population = self.mutation(population, mutation_rate=mutation_rate, population_size=population_size)
+            population = self.mutation(population, mutation_rate, population_size=population_size)
 
-            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
-
-            # Replace the worst individual from the old population with the offspring
-            population.sort(key=lambda individual: individual.cost)  # Sort the population by cost
+            population.sort(key=lambda individual: individual.cost)
             population.pop()
             population.append(offspring)
 
-            for individual in population:
-                individual = self.busca_vizinhanca(individual.columns.copy(), individual.cost, 0.8, 1)
-
-            population.sort(key=lambda individual: individual.cost)
-        # Select the best individual as the solution
         best_individual = population[0]
 
         return best_individual
 
+    def genetic_algorithm_local_search(self, population_size, generations, mutation_rate, selection_method):
+        # Inicializando a população
+        population = []
+        best_solutions = []
+
+        for _ in range(population_size):
+            individual = self.vasko_wilson()
+            population.append(individual)
+
+        population.sort(key=lambda individual: individual.cost)
+
+        # Loop evolutivo, critério de parada: número de gerações
+        for _ in range(generations):
+            print("ITERAÇÃO: ", _)
+            print("População: ")
+            for individual in population:
+                print(individual.columns, "custo: ", individual.cost)
+
+            best_solutions.append(population[0].cost)
+
+            # Calcula a soma de fitness da população
+            fitness_sum = sum(individual.cost for individual in population)
+
+            # Avalia o fitness de cada indivíduo
+            self.evaluate_fitness(population, fitness_sum)
+
+            # Seleciona pais para reprodução dependendo do método de seleção passado como argumento
+            if selection_method == "roulette":
+                parents = self.selection_roulette(population)
+            else:
+                parents = self.selection_tournament(population, population_size//2)
+
+            # Aplica crossover entre os pais e mutação em indivíduos aleatórios para criar uma solução descendente
+            offspring = self.crossover(parents)
+            
+            population = self.mutation(population, mutation_rate=mutation_rate, population_size=population_size)
+
+            # Aplica busca local no filho
+            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
+
+            # Ordena a população pelo custo
+            population.sort(key=lambda individual: individual.cost)
+
+            # Substitui o pior indivíduo da população antiga pelo filho
+            population.pop()
+            population.append(offspring)
+
+            # Aplica busca local em todos os indivíduos da população
+            for individual in population:
+                individual = self.busca_vizinhanca(individual.columns.copy(), individual.cost, 0.8, 1)
+
+            population.sort(key=lambda individual: individual.cost)
+        
+        # Seleciona o melhor indivíduo como solução
+        best_individual = population[0]
+        plot_solution_conversion(best_solutions)
+
+        return best_individual
+
     def evaluate_fitness(self, population, fitness_sum):
-        # Calculate the fitness score for the given individual based on its cost
+        # Avalia o fitness de cada indivíduo baseado no seu custo
         for individual in population:
             individual.fitness = (individual.cost/fitness_sum)*100
 
 
     def selection_tournament(self, population, tournament_size):
-        # Select two different parents
+        # Seleciona dois pais diferentes
         parents = []
         for _ in range(2):
-            # Randomly select a number of individuals from the population
+            # Seleciona aleatoriamente um subconjunto da população
             tournament = random.sample(population, tournament_size)
             
-            # Sort the tournament by fitness
+            # Ordena o subconjunto baseado no fitness
             tournament.sort(key=lambda individual: individual.fitness)
             
-            # Select the individual with the highest fitness
+            # Seleciona o melhor indivíduo do subconjunto
             parents.append(tournament[-1])
 
-        # Return the selected parents
+        # Retorna os pais selecionados
         return parents
     
     def selection_roulette(self, population):
-        # Select two different parents
+        # Seleciona dois pais diferentes
         parents = []
         already_used_fitness = 0
         for _ in range(2):
-            # Generate a random number between 0 and the total fitness score
+            # Gera um número aleatório entre 0 e 100
             random_number = random.uniform(0, 100 - already_used_fitness)
             
-            # Iterate through the population and find the individuals that correspond to the random number
+            # Itera sobre a população e seleciona o indivíduo que acumula o fitness igual ou maior que o número aleatório
             cumulative_fitness = 0
             for individual in population:
                 cumulative_fitness += individual.fitness
@@ -376,8 +387,7 @@ class SCP:
                     already_used_fitness += individual.fitness
                     break
 
-        # Return the selected parents
-        print("Pais selecionados: ", parents[0].columns, parents[1].columns)
+        # Retorna os pais selecionados
         return parents
 
 
@@ -386,14 +396,13 @@ class SCP:
         parent2 = parents[1]
         
         len_lines = self.quant_linhas+1
-        # Perform crossover operation to create a new individual
-        # For example, you can randomly select a crossover point and swap the genetic material between parents
+        # Performa o crossover entre os pais para criar um filho
         
         offspring_cols = parent1.columns.union(parent2.columns)
 
         wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in offspring_cols) for i in range(len_lines)]
 
-        # Iterate through the columns and remove the unnecessary ones
+        # Itera através das colunas e remove as desnecessárias
         for k in reversed(list(offspring_cols)):
             cont = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in offspring_cols) for i in range(len_lines)]
 
@@ -411,37 +420,36 @@ class SCP:
             valor += self.custos[i-1]
 
         offspring = Solution(offspring_cols, round(valor, 2))
-        #print("Filho gerado: ", offspring.columns)
-        # Return the offspring
+
+        # Retorna o filho gerado
         return offspring
 
     def mutation(self, population, mutation_rate, population_size):
-        # Implement your mutation method here
         len_lines = self.quant_linhas+1
 
+        # Seleciona aleatoriamente indivíduos para mutação
         population_to_mutate = [Solution(individual.columns.copy(), individual.cost) for individual in population]
         individuals_to_mutate = random.sample(population_to_mutate, int(mutation_rate*population_size))
 
         for individual in individuals_to_mutate:
-            # Add random amount of columns
+            # Adiciona uma quantidade aleatória de colunas ao indivíduo
             num_columns_to_add = random.randint(1, int(len(self.colunas)*0.1))
             columns_to_add = random.sample(self.colunas, num_columns_to_add)
-            # Remove columns that are already in the individual
+            # Remove as colunas escolhidas que já estão no indivíduo
             available_columns = [column for column in columns_to_add if column not in individual.columns]
             
             individual.columns.update(available_columns)
             
-            # Shuffle the solution
+            # Embaralha a solução
             individual.columns = list(individual.columns)
 
             random.shuffle(individual.columns)
 
             individual.columns = set(individual.columns)
                     
-            # Remove unnecessary columns
+            # Remove as colunas desnecessárias
             wi = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in individual.columns) for i in range(len_lines)]
 
-            # Iterate through the columns and remove the unnecessary ones
             for k in reversed(list(individual.columns)):
 
                 cont = [sum(1 for col in self.colunas_que_cobrem_linha[i] if col in individual.columns) for i in range(len_lines)]
@@ -453,7 +461,6 @@ class SCP:
 
                 if flag:
                     individual.columns.remove(k)
-                    
                     wi = [wi[i] - cont[i] for i in range(len_lines)]
             
             valor = 0
@@ -523,8 +530,16 @@ class SCP:
         
         return solucao   
 
+def plot_solution_conversion(best_solutions):
+    # Constroi o grafico da convergencia da melhor solucao.
+    plt.plot(best_solutions)
+    plt.xlabel('Generation')
+    plt.ylabel('Cost')
+    plt.title('Best solution conversion')
+    plt.show()
 
 def random_greedy(c, k):
+    # Escolhe de forma aleatória uma das heurísticas greedy
     j_a_escolher = []
 
     x = random.choice([1, 2, 3, 4, 5, 6, 7, 9])
@@ -589,6 +604,7 @@ def random_greedy(c, k):
 
 
 def parse_arquivo(nome_arquivo):
+    # Função para parsear o arquivo de entrada e transformar em um objeto do problema
     indice_coluna = []
     custo = []
     indice_linha = []
@@ -623,6 +639,7 @@ def parse_arquivo(nome_arquivo):
 
 
 def is_covering_feasible(columns, selected_columns, M):
+    # Verifica se a solução é factível
     covered_rows = set()
     for col_idx in selected_columns:
         covered_rows.update(columns[col_idx-1])
@@ -658,10 +675,10 @@ def teste_genetico_local_search(file_path, generations, population_size, mutatio
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
-def teste_genetico(file_path):
+def teste_genetico(file_path, generations, population_size, mutation_rate, selection_method, seed):
     file_path = os.path.realpath(file_path)
     scp = parse_arquivo(file_path)
-    melhor_solucao = scp.genetic_algorithm()
+    melhor_solucao = scp.genetic_algorithm(generations=generations, population_size=population_size, mutation_rate=mutation_rate, selection_method=selection_method)
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
@@ -676,6 +693,7 @@ def main():
     parser.add_argument('-sm', '--parametro4', required=True, help='Metodo de selecao')
     parser.add_argument('-f', '--parametro5', required=True, help='Arquivo de entrada')
     parser.add_argument('-s', '--parametro6', required=False, help='Seed para o random')
+    parser.add_argument('-alg', '--parametro7', required=False, help='"bl" para utilizar busca local')
 
     # Parseando os argumentos da linha de comando
     args = parser.parse_args()
@@ -686,15 +704,22 @@ def main():
     parametro3 = float(args.parametro3)
     parametro4 = args.parametro4
     parametro5 = args.parametro5
+    parametro6 = args.parametro7
     if args.parametro6:
         parametro6 = int(args.parametro6)
     else:
         parametro6 = None
 
-    t1 = time.time()
-    teste_genetico_local_search(parametro5, parametro2, parametro1, parametro3, parametro4, parametro6)
-    t2 = time.time()
-    print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
+    if args.parametro7 == "bl":
+        t1 = time.time()
+        teste_genetico_local_search(parametro5, parametro2, parametro1, parametro3, parametro4, parametro6)
+        t2 = time.time()
+        print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
+    else:
+        t1 = time.time()
+        teste_genetico(parametro5, parametro2, parametro1, parametro3, parametro4, parametro6)
+        t2 = time.time()
+        print("O tempo total em segundos da execução foi", round(t2 - t1, 2))
 
 if __name__ == "__main__":
     main()
