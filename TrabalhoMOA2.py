@@ -32,114 +32,6 @@ class SCP:
         self.linhas_cobertas = linhas_cobertas
         self.custos = custos
         self.colunas_que_cobrem_linha = colunas_que_cobrem_linha
-
-    def busca_vizinhanca_first(self, S, Z_S, P1, P2):
-        # Passo 0
-        linhas_cobertas = [len(self.colunas_que_cobrem_linha[k]) for k in range(1, self.quant_linhas+1)]
-        S_prime = set(self.colunas) - S
-        N_S = len(S)
-        Q_S = max(self.custos[i-1] for i in S)
-   
-        wi = [0 for _ in range(self.quant_linhas+1)]
-        i = 0
-
-        for linhas in self.colunas_que_cobrem_linha:
-            for colunas in linhas:
-                if colunas in S:
-                    wi[i] += 1
-            i += 1
-        
-        d = 0
-        D = math.ceil(P1 * N_S)
-        E = math.ceil(P2 * Q_S)
-
-        while S:
-            # Passo 1
-            k = random.choice(list(S))
-            # Passo 2
-            S.remove(k)
-            S_prime = list(S_prime)
-            insort(S_prime, k)
-            S_prime = set(S_prime)
-            
-            Z_S -= round(self.custos[k-1], 2)
-          
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
-            
-            for i in range(len(linhas_cobertas)+1):
-                if k in self.colunas_que_cobrem_linha[i]:
-                    cont[i] += 1
-
-            wi = [wi[i] - cont[i] for i in range(len(linhas_cobertas)+1)]
- 
-            d += 1
-            if d == D:
-                break
-        
-        while True:
-            # Passo 3
-            U = {i for i in range(self.quant_linhas+1) if wi[i] == 0}
-            U = U - {0}
-
-            if not U:
-                break
-
-            # Passo 4
-
-            S_prime_E = {j for j in S_prime if self.custos[j-1] <= E}
-
-            #wi significa QUANTAS COLUNAS COBRE A LINHA i
-            #self.linhas_cobertas[i] significa quais linhas sao cobertas pela coluna i
-            #S_prime_E === melhores colunas para serem colocadas na solução
-            
-            alpha = [[1 if wi[i] == 0 and i in self.linhas_cobertas[j-1] and j in S_prime_E else 0 for j in range(self.quant_colunas+1)] for i in range(self.quant_linhas+1)]
-
-            v_j = [sum(alpha[i][j] for i in range(self.quant_linhas+1)) if j in S_prime_E else 0 for j in range(self.quant_colunas+1)]
-
-            for j in S_prime_E:
-                if v_j[j] != 0:
-                    k = j
-                    break
-
-            # Passo 5
-            S_prime.remove(k)
-            S.add(k)
-
-            Z_S += round(self.custos[k-1], 2)
-
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
-
-            for i in range(len(linhas_cobertas)+1):
-                if k in self.colunas_que_cobrem_linha[i]:
-                    cont[i] += 1
-            wi = [wi[i] + cont[i] for i in range(len(linhas_cobertas)+1)]
-
-        # Passo 6
-        for k in reversed(list(S)):
-            cont = [0 for _ in range(len(linhas_cobertas)+1)]
-            for i in range(len(linhas_cobertas)+1):
-                if k in self.colunas_que_cobrem_linha[i]:
-                    cont[i] += 1
-
-
-            flag = True
-            for i in self.linhas_cobertas[k-1]:
-                if wi[i] - cont[i] < 1:
-                    flag = False
-
-            if flag:
-                S.remove(k)
-                S_prime.add(k)
-
-                Z_S -= round(self.custos[k-1], 2)
-
-                cont = [0 for _ in range(len(linhas_cobertas)+1)]
-                for i in range(len(linhas_cobertas)+1):
-                    if k in self.colunas_que_cobrem_linha[i]:
-                        cont[i] += 1
-                wi = [wi[i] - cont[i] for i in range(len(linhas_cobertas)+1)]
-
-        return S.copy(), round(Z_S, 2)
         
 
     def busca_vizinhanca(self, S, Z_S, P1, P2):
@@ -252,8 +144,6 @@ class SCP:
     
     def genetic_algorithm(self, population_size, generations, mutation_rate, selection_method):
         population = []
-        population_size = 20
-        current_best = float('inf')
         best_solutions = []
 
         for _ in range(population_size):
@@ -262,11 +152,10 @@ class SCP:
 
         population.sort(key=lambda individual: individual.cost)
 
-        if population[0].cost < current_best:
-            current_best = population[0].cost
-            best_solutions.append(current_best)
 
         for _ in range(generations):
+            best_solutions.append(population[0].cost)
+
             fitness_sum = sum(individual.cost for individual in population)
 
             self.evaluate_fitness(population, fitness_sum)
@@ -280,11 +169,14 @@ class SCP:
             
             population = self.mutation(population, mutation_rate, population_size=population_size)
 
+            offspring = self.busca_vizinhanca(offspring.columns.copy(), offspring.cost, 0.8, 1)
+
             population.sort(key=lambda individual: individual.cost)
             population.pop()
             population.append(offspring)
 
         best_individual = population[0]
+        plot_solution_conversion(best_solutions)
 
         return best_individual
 
@@ -671,13 +563,15 @@ def teste_genetico_local_search(file_path, generations, population_size, mutatio
     scp = parse_arquivo(file_path)
     if seed:
         random.seed(seed)
-    melhor_solucao = scp.genetic_algorithm_local_search(generations, population_size, mutation_rate, selection_method)
+    melhor_solucao = scp.genetic_algorithm_local_search(generations=generations, population_size=population_size, mutation_rate=mutation_rate, selection_method=selection_method)
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
 
 def teste_genetico(file_path, generations, population_size, mutation_rate, selection_method, seed):
     file_path = os.path.realpath(file_path)
     scp = parse_arquivo(file_path)
+    if seed:
+        random.seed(seed)
     melhor_solucao = scp.genetic_algorithm(generations=generations, population_size=population_size, mutation_rate=mutation_rate, selection_method=selection_method)
     print("Melhor solução encontrada: ", melhor_solucao.columns)
     print("Custo: ", melhor_solucao.cost)
