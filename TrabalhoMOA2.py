@@ -90,7 +90,7 @@ class SCP:
             
             alpha = [[1 if wi[i] == 0 and i in self.linhas_cobertas[j-1] and j in S_prime_E else 0 for j in range(len_columns)] for i in range(len_lines)]
 
-            alpha_transpose = list(map(list, zip(*alpha)))  # Transpose alpha matrix
+            alpha_transpose = list(map(list, zip(*alpha))) 
 
             v_j = [sum(alpha_transpose[j]) if j in S_prime_E else 0 for j in range(len_columns)]
 
@@ -154,6 +154,12 @@ class SCP:
 
 
         for _ in range(generations):
+
+            print("ITERAÇÃO: ", _)
+            print("População: ")
+            for individual in population:
+                print(individual.columns, "custo: ", individual.cost)
+
             best_solutions.append(population[0].cost)
 
             fitness_sum = sum(individual.cost for individual in population)
@@ -361,9 +367,7 @@ class SCP:
             individual.cost = round(valor, 2)
 
         population.sort(key=lambda x: x.cost)
-        print("-----------------------ORDENAÇÃO DA POPULAÇÃO APÓS MUTAÇÃO:----------------------")
-        for individual in population:
-            print(individual.columns, "custo: ", individual.cost)
+
         for _ in range(int(mutation_rate*population_size)):
             population.pop()
         population.extend(individuals_to_mutate)
